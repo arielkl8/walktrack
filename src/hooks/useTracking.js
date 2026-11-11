@@ -28,6 +28,17 @@ export function useTracking(gpsPoints, profile) {
     } catch (_) {}
   };
 
+  // The browser drops the wake lock whenever the page is hidden; re-acquire it on return
+  // (with the screen off, mobile browsers stop GPS and the route turns into a straight line)
+  useEffect(() => {
+    if (state !== 'active' && state !== 'paused') return;
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') requestWakeLock();
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [state]);
+
   const releaseWakeLock = () => {
     if (wakeLockRef.current) {
       wakeLockRef.current.release().catch(() => {});

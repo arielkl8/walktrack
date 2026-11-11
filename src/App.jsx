@@ -57,9 +57,10 @@ export default function App() {
   return (
     <div className="flex flex-col h-full overflow-hidden" dir="rtl" style={{ background: '#070B14' }}>
       <main className="flex-1 overflow-hidden relative">
-        {page === 'home' && (
+        {/* Home stays mounted so an active walk keeps tracking while browsing other tabs */}
+        <div className="h-full" style={{ display: page === 'home' ? 'block' : 'none' }}>
           <Home profile={profile} userId={user.uid} onNavigate={navigate} />
-        )}
+        </div>
         {page === 'history' && (
           <History userId={user.uid} onViewRoute={handleViewRoute} />
         )}

@@ -30,7 +30,8 @@ export default function Home({ profile, userId, onNavigate }) {
   const tracking = useTracking(gps.gpsPoints, profile);
   const { state } = tracking;
 
-  useEffect(() => { if (state === 'idle') gps.getPosition(); }, []); // eslint-disable-line
+  // Keep GPS warm while idle so the first tracked points are already accurate
+  useEffect(() => { if (state === 'idle') gps.startWatching(false); }, [state]); // eslint-disable-line
 
   const handleStart = useCallback(() => {
     gps.startWatching(true);
@@ -70,6 +71,7 @@ export default function Home({ profile, userId, onNavigate }) {
         gpsPoints={gps.gpsPoints}
         currentPosition={gps.currentPosition}
         follow={isActive}
+        liveTail={isActive}
         fitBounds={summaryBounds}
         className="flex-1"
       />
