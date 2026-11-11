@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { saveProfile } from '../utils/storage';
+import { APP_VERSION } from '../version';
 
 const DEFAULTS = { displayName: '', age: 30, gender: 'male', heightCm: 170, weightKg: 70 };
 
@@ -97,6 +98,7 @@ export default function Profile({ profile, userId, onSaved, onSignOut }) {
         >
           {saving ? 'שומר...' : saved ? '✓ נשמר!' : 'שמור פרופיל'}
         </button>
+        <p className="text-center text-xs mt-3" style={{ color: '#475569' }}>WalkTrack {APP_VERSION}</p>
       </div>
     </div>
   );

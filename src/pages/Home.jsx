@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo } from 'react';
 import MapView from '../components/MapView';
+import { APP_VERSION } from '../version';
 import { useGPS } from '../hooks/useGPS';
 import { useTracking } from '../hooks/useTracking';
 import { saveActivity } from '../utils/storage';
@@ -65,7 +66,15 @@ export default function Home({ profile, userId, onNavigate }) {
   }, [isSummary, gps.gpsPoints]);
 
   return (
-    <div className="flex flex-col h-full" style={{ background: '#070B14' }}>
+    <div className="flex flex-col h-full relative" style={{ background: '#070B14' }}>
+      {/* Version badge */}
+      <span
+        className="absolute top-3 left-3 z-[1000] px-2 py-0.5 rounded-md text-[10px] font-semibold pointer-events-none"
+        style={{ background: 'rgba(7,11,20,0.7)', color: '#64748B', border: '1px solid rgba(255,255,255,0.08)' }}
+      >
+        {APP_VERSION}
+      </span>
+
       {/* Map */}
       <MapView
         gpsPoints={gps.gpsPoints}
