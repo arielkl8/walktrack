@@ -8,16 +8,28 @@ const HOLD_MS = 1200;
 // Exit with a long press, so touches inside a pocket don't close it.
 export default function PocketMode({ distanceKm, time, onExit }) {
   const [holding, setHolding] = useState(false);
+  const [ready, setReady] = useState(false); // hold completed — exit when the finger lifts
   const timer = useRef(null);
   const wakeLockSupported = typeof navigator !== 'undefined' && 'wakeLock' in navigator;
 
   const startHold = () => {
     setHolding(true);
-    timer.current = setTimeout(() => { setHolding(false); onExit(); }, HOLD_MS);
+    timer.current = setTimeout(() => setReady(true), HOLD_MS);
   };
   const cancelHold = () => {
     setHolding(false);
+    setReady(false);
     clearTimeout(timer.current);
+  };
+  const release = (e) => {
+    if (!ready) { cancelHold(); return; }
+    e.preventDefault();
+    // The click that follows this release would land on whatever is under the finger once the
+    // black screen is gone (e.g. the Stop button). Swallow clicks for a moment after exiting.
+    const block = (ev) => { ev.stopPropagation(); ev.preventDefault(); };
+    document.addEventListener('click', block, true);
+    setTimeout(() => document.removeEventListener('click', block, true), 700);
+    onExit();
   };
   useEffect(() => () => clearTimeout(timer.current), []);
 
@@ -26,9 +38,10 @@ export default function PocketMode({ distanceKm, time, onExit }) {
       className="fixed inset-0 z-[3000] flex flex-col items-center justify-center select-none"
       style={{ background: '#000', touchAction: 'none' }}
       onPointerDown={startHold}
-      onPointerUp={cancelHold}
+      onPointerUp={release}
       onPointerLeave={cancelHold}
       onPointerCancel={cancelHold}
+      onTouchEnd={(e) => e.preventDefault()}
       onContextMenu={(e) => e.preventDefault()}
     >
       <p className="text-4xl font-black stat-value" style={{ color: '#1E3A66' }}>{distanceKm.toFixed(2)} ק"מ</p>
@@ -45,7 +58,7 @@ export default function PocketMode({ distanceKm, time, onExit }) {
             }}
           />
         </div>
-        <p className="text-xs" style={{ color: '#334155' }}>לחיצה ארוכה ליציאה</p>
+        <p className="text-xs" style={{ color: '#334155' }}>{ready ? 'הרם את האצבע ליציאה' : 'לחיצה ארוכה ליציאה'}</p>
         <p className="text-[11px] leading-relaxed" style={{ color: '#1F2937' }}>
           {wakeLockSupported
             ? 'המדידה ממשיכה. אל תכבה את המסך בכפתור ההפעלה'
