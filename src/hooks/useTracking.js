@@ -135,12 +135,13 @@ export function useTracking(gpsPoints, profile) {
       distanceMeters: Math.round(distanceMeters),
       avgSpeedKmh: Math.round(avgSpeedKmh * 10) / 10,
       caloriesBurned: calories,
-      gpsPoints: pts.map(({ lat, lng, accuracy, altitude, timestamp }) => ({
+      gpsPoints: pts.map(({ lat, lng, accuracy, altitude, timestamp, estimated }) => ({
         lat,
         lng,
-        accuracy,
+        accuracy: accuracy ?? null,
         altitude: altitude ?? null,
         timestamp,
+        ...(estimated ? { estimated: true } : {}),
       })),
       mapBounds:
         pts.length

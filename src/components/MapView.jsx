@@ -1,10 +1,37 @@
 import { useEffect, useRef } from 'react';
-import { MapContainer, TileLayer, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import { MapContainer, Polyline, CircleMarker, useMap } from 'react-leaflet';
+import 'maplibre-gl/dist/maplibre-gl.css';
+import { maplibreGL } from '@maplibre/maplibre-gl-leaflet';
+import { setWorkerUrl } from 'maplibre-gl';
+import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?url';
+
+// MapLibre looks for its worker next to its own file, which bundling moves — point it there explicitly
+setWorkerUrl(maplibreWorkerUrl);
 
 const DEFAULT_CENTER = [31.7683, 35.2137];
 
+// OpenFreeMap — free vector map, no API key and no usage limits.
+// (Carto's dark tiles started requiring an API key and showed "API KEY REQUIRED" on every tile.)
+// Vector tiles stay sharp at every zoom level, zooming in and out.
+const MAP_STYLE = 'https://tiles.openfreemap.org/styles/dark';
+
+function VectorBaseMap() {
+  const map = useMap();
+  useEffect(() => {
+    const layer = maplibreGL({
+      style: MAP_STYLE,
+      attributionControl: false,
+      attribution: '<a href="https://openfreemap.org" target="_blank" rel="noopener">OpenFreeMap</a> © <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a>',
+    });
+    map.attributionControl?.setPrefix(false);
+    layer.addTo(map);
+    return () => { map.removeLayer(layer); };
+  }, [map]);
+  return null;
+}
+
 // Leaflet caches its container size; tell it whenever the container resizes
-// (bottom panel changes height, page hidden/shown, rotation) or tiles render misaligned/grey.
+// (bottom panel changes height, page hidden/shown, rotation) or the map renders misaligned.
 function AutoResize() {
   const map = useMap();
   useEffect(() => {
@@ -47,6 +74,28 @@ function FitBounds({ bounds }) {
   return null;
 }
 
+// Split the route into runs of measured vs. estimated points (gaps filled while the
+// phone was asleep), so estimated parts can be drawn dashed.
+function splitSegments(points) {
+  const segs = [];
+  let cur = null;
+  for (let i = 0; i < points.length; i++) {
+    const p = points[i];
+    const est = !!p.estimated;
+    if (!cur || cur.estimated !== est) {
+      // share the boundary point so the line has no holes
+      const prev = cur ? cur.positions[cur.positions.length - 1] : null;
+      cur = { estimated: est, positions: prev ? [prev] : [] };
+      segs.push(cur);
+    }
+    cur.positions.push([p.lat, p.lng]);
+  }
+  return segs.filter((s) => s.positions.length > 1);
+}
+
+const SOLID = { color: '#4F94FF', weight: 5, opacity: 0.9, lineJoin: 'round', lineCap: 'round' };
+const DASHED = { color: '#4F94FF', weight: 4, opacity: 0.6, dashArray: '2 9', lineJoin: 'round', lineCap: 'round' };
+
 export default function MapView({ gpsPoints = [], currentPosition = null, follow = false, liveTail = false, fitBounds = null, className = '' }) {
   const initialCenter = currentPosition
     ? [currentPosition.lat, currentPosition.lng]
@@ -54,11 +103,12 @@ export default function MapView({ gpsPoints = [], currentPosition = null, follow
     ? [gpsPoints[gpsPoints.length - 1].lat, gpsPoints[gpsPoints.length - 1].lng]
     : DEFAULT_CENTER;
 
-  const polyline = gpsPoints.map((p) => [p.lat, p.lng]);
+  const points = [...gpsPoints];
   // While tracking, connect the recorded route to the live position so the line follows you in real time
-  if (liveTail && currentPosition && polyline.length) {
-    polyline.push([currentPosition.lat, currentPosition.lng]);
+  if (liveTail && currentPosition && points.length) {
+    points.push({ lat: currentPosition.lat, lng: currentPosition.lng });
   }
+  const segments = splitSegments(points);
 
   return (
     // Leaflet misbehaves inside RTL documents — force LTR for the map only
@@ -66,30 +116,27 @@ export default function MapView({ gpsPoints = [], currentPosition = null, follow
       <MapContainer
         center={initialCenter}
         zoom={17}
+        minZoom={3}
+        maxZoom={20}
         zoomControl={false}
-        attributionControl={false}
+        attributionControl={true}
         style={{ position: 'absolute', inset: 0 }}
       >
-        {/* Dark map tiles — Carto Dark Matter (free, no API key) */}
-        <TileLayer
-          url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
-          subdomains="abcd"
-          maxZoom={20}
-          maxNativeZoom={19}
-        />
+        <VectorBaseMap />
 
-        {polyline.length > 1 && (
+        {segments.map((s, i) => (
           <Polyline
-            positions={polyline}
-            pathOptions={{ color: '#4F94FF', weight: 5, opacity: 0.9, lineJoin: 'round', lineCap: 'round' }}
+            key={`${i}-${s.estimated}`}
+            positions={s.positions}
+            pathOptions={s.estimated ? DASHED : SOLID}
             smoothFactor={0.5}
           />
-        )}
+        ))}
 
         {/* Start dot */}
-        {polyline.length > 0 && (
+        {points.length > 0 && (
           <CircleMarker
-            center={polyline[0]}
+            center={[points[0].lat, points[0].lng]}
             radius={6}
             pathOptions={{ color: '#fff', fillColor: '#00D084', fillOpacity: 1, weight: 2 }}
           />

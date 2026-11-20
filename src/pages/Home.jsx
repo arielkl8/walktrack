@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import MapView from '../components/MapView';
+import PocketMode from '../components/PocketMode';
 import { APP_VERSION } from '../version';
 import { useGPS } from '../hooks/useGPS';
 import { useTracking } from '../hooks/useTracking';
@@ -30,6 +31,10 @@ export default function Home({ profile, userId, onNavigate }) {
   const gps      = useGPS();
   const tracking = useTracking(gps.gpsPoints, profile);
   const { state } = tracking;
+  const [pocket, setPocket] = useState(false);
+
+  // Leave pocket mode automatically once the walk ends
+  useEffect(() => { if (state !== 'active' && state !== 'paused') setPocket(false); }, [state]);
 
   // Keep GPS warm while idle so the first tracked points are already accurate
   useEffect(() => { if (state === 'idle') gps.startWatching(false); }, [state]); // eslint-disable-line
@@ -67,6 +72,13 @@ export default function Home({ profile, userId, onNavigate }) {
 
   return (
     <div className="flex flex-col h-full relative" style={{ background: '#070B14' }}>
+      {pocket && (isActive || isPaused) && (
+        <PocketMode
+          distanceKm={tracking.distanceKm}
+          time={formatTime(tracking.durationSeconds)}
+          onExit={() => setPocket(false)}
+        />
+      )}
       {/* Version badge */}
       <span
         className="absolute top-3 left-3 z-[1000] px-2 py-0.5 rounded-md text-[10px] font-semibold pointer-events-none"
@@ -133,6 +145,15 @@ export default function Home({ profile, userId, onNavigate }) {
                 <span className="text-xs font-semibold" style={{ color: '#FF9F43' }}>מושהה</span>
               )}
             </div>
+
+            {/* Pocket mode — keeps GPS running instead of turning the screen off */}
+            <button
+              onClick={() => setPocket(true)}
+              className="w-full mb-3 rounded-xl py-2.5 text-sm font-semibold"
+              style={{ background: 'rgba(79,148,255,0.1)', border: '1px solid rgba(79,148,255,0.25)', color: '#4F94FF' }}
+            >
+              🌙 מצב כיס (מסך שחור, המדידה ממשיכה)
+            </button>
 
             {/* Stats row */}
             <div

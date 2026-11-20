@@ -1,5 +1,11 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { haversine } from '../utils/haversine';
+import { estimateGap } from '../utils/gapFill';
+
+// A gap at least this long AND this far means GPS was paused (screen off / app in background).
+// It gets filled along a walking route instead of a straight line.
+const GAP_SECONDS = 15;
+const GAP_METERS = 30;
 
 // Readings worse than this are ignored (phones typically report 5–30m outdoors)
 const MAX_ACCURACY = 35;
@@ -50,6 +56,19 @@ export function useGPS() {
   const rejectsRef = useRef(0);
   const kalmanRef = useRef(createKalman());
   const collectingRef = useRef(false); // avoids stale-closure issues inside watchPosition callback
+  const skipGapFillRef = useRef(false); // the user paused on purpose: don't invent a path for that time
+  const sessionRef = useRef(0);         // bumps on reset so late gap results don't leak into a new walk
+
+  const fillGap = useCallback(async (from, to) => {
+    const session = sessionRef.current;
+    const filler = await estimateGap(from, to);
+    if (session !== sessionRef.current || !filler.length) return;
+    setGpsPoints((prev) => {
+      const i = prev.indexOf(from);
+      if (i < 0 || prev[i + 1] !== to) return prev;
+      return [...prev.slice(0, i + 1), ...filler, ...prev.slice(i + 1)];
+    });
+  }, []);
 
   const handlePosition = useCallback((position) => {
     const { latitude, longitude, accuracy, altitude } = position.coords;
@@ -85,7 +104,15 @@ export function useGPS() {
 
     lastPointRef.current = pos;
     setGpsPoints((prev) => [...prev, pos]);
-  }, []);
+
+    if (last && !skipGapFillRef.current) {
+      const gapSec = (pos.timestamp - last.timestamp) / 1000;
+      if (gapSec >= GAP_SECONDS && haversine(last.lat, last.lng, pos.lat, pos.lng) >= GAP_METERS) {
+        fillGap(last, pos);
+      }
+    }
+    skipGapFillRef.current = false;
+  }, [fillGap]);
 
   const handleError = useCallback((err) => {
     if (err.code === 1) setError('נא לאשר גישה למיקום בהגדרות הדפדפן');
@@ -112,6 +139,7 @@ export function useGPS() {
     // but restart smoothing since the walker may have moved
     kalmanRef.current.reset();
     rejectsRef.current = 0;
+    skipGapFillRef.current = true;
   }, []);
 
   const pauseCollecting = useCallback(() => {
@@ -127,11 +155,24 @@ export function useGPS() {
   }, []);
 
   const resetPoints = useCallback(() => {
+    sessionRef.current += 1;
     setGpsPoints([]);
     lastPointRef.current = null;
+    skipGapFillRef.current = false;
     rejectsRef.current = 0;
     kalmanRef.current.reset();
   }, []);
+
+  // Mobile browsers suspend watchPosition while the screen is off. When the page comes back,
+  // ask for a fresh fix immediately instead of waiting for the watch to wake up.
+  useEffect(() => {
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible' || watchIdRef.current === null) return;
+      navigator.geolocation?.getCurrentPosition(handlePosition, () => {}, WATCH_OPTIONS);
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [handlePosition]);
 
   // Clear the watch if the component using this hook unmounts
   useEffect(() => stopWatching, [stopWatching]);
